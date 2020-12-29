@@ -1,0 +1,27 @@
+name: NPCNavigator
+version: 0.1_alpha
+main: com.mattymatty.NPCNavigator.NPCNavigator
+api-version: 1.16
+prefix: [ D* Lite ]
+load: STARTUP
+authors: [ mattymatty97 ]
+description: D* Lite pathfinder implementation for Citizens NPCs
+website: https://github.com/mattymatty97
+
+commands:
+  npcnavigator:
+    description: default command for testing the pathfinder
+    usage: /npcn
+    aliases: [npcn,path]
+    permission: npcn.test
+    permission-message: You don't have <permission>
+
+permissions:
+  npcn.test:
+    description: allows usage of test commands
+    default: false
+  npcn.*:
+    description: allows usage of all commands
+    default: op
+    children:
+      npcn.test: true
