@@ -1,6 +1,7 @@
 package com.mattymatty.NPCNavigator;
 
 import com.mattymatty.NPCNavigator.DStarLite.DStarLite;
+import com.mattymatty.NPCNavigator.DStarLite.DStarLitePathfinder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -8,6 +9,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.LinkedList;
@@ -59,25 +61,40 @@ public class Commands implements CommandExecutor {
                         long stime = System.currentTimeMillis();
 
                         sender.sendMessage("Starting path");
-                        DStarLite pathfinder = new DStarLite(pos1.getWorld());
+                        DStarLitePathfinder pathfinder = new DStarLitePathfinder();
 
-                        pathfinder.init(pos1.getBlockX(), pos1.getBlockY(), pos1.getBlockZ(), pos2.getBlockX(), pos2.getBlockY(), pos2.getBlockZ());
-                        boolean found = pathfinder.replan();
-
-                        long etime = System.currentTimeMillis();
-
-                        if (found) {
-                            sender.sendMessage("path found in " + (etime - stime) + "ms");
-
-                            List<Location> path = pathfinder.getPath().stream()
-                                    .map(s -> new Location(pathfinder.getWorld(), s.x + 0.5, s.y, s.z + 0.5))
-                                    .collect(Collectors.toList());
-
-                            showParticles(path, true);
-                            sender.sendMessage("path shown");
-                        } else {
-                            sender.sendMessage("failed to find path in " + (etime - stime) + "ms");
-                        }
+                        pathfinder.init(pos1.toBlockLocation(), pos2.toBlockLocation()).start();
+                        LinkedList<Location> path = new LinkedList<Location>();
+                        path.add(pos1.toCenterLocation());
+                        BukkitTask particle;
+                        particle = new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                Location next = pathfinder.next();
+                                if (next != null) {
+                                    if (next.toCenterLocation() != path.pollLast()) {
+                                        Location cur = next.toCenterLocation();
+                                        path.add(cur);
+                                        Objects.requireNonNull(cur.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, cur, 7);
+                                    }
+                                } else {
+                                    sender.sendMessage("No Path Found");
+                                    this.cancel();
+                                }
+                            }
+                        }.runTaskTimer(NPCNavigator.instance,5,10);
+                        particles.add(particle);
+                         particle = Bukkit.getServer().getScheduler().runTaskTimer(NPCNavigator.instance, () -> {
+                            int i = 0;
+                            for (Location loc : path) {
+                                i++;
+                                Location act = cloneLoc(loc);
+                                Bukkit.getServer().getScheduler().runTaskLater(NPCNavigator.instance, () -> {
+                                    Objects.requireNonNull(act.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, act, 7);
+                                    }, i * 10L);
+                                }
+                        }, 15, Math.max(10, Math.min(path.size() * 10, 140)));
+                        particles.add(particle);
 
                         return true;
                     }

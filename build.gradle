@@ -5,9 +5,6 @@ apply plugin: 'java'
 group = 'com.mattymatty'
 version = '0.0.1-SNAPSHOT'
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
-
 repositories {
     mavenCentral()
     maven {
@@ -22,6 +19,7 @@ repositories {
 
 dependencies {
     compileOnly 'com.destroystokyo.paper:paper-api:1.16.4-R0.1-SNAPSHOT'
+    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.11'
 }
 
 processResources {
