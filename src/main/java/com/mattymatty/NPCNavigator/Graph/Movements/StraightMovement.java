@@ -1,13 +1,15 @@
 package com.mattymatty.NPCNavigator.Graph.Movements;
 
+import com.mattymatty.NPCNavigator.Graph.BlockCell;
 import com.mattymatty.NPCNavigator.Graph.Cell;
 import com.mattymatty.NPCNavigator.Graph.Movement;
+import com.mattymatty.NPCNavigator.Graph.Updatable;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Door;
 
-import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 public abstract class StraightMovement extends Movement {
@@ -41,15 +43,27 @@ public abstract class StraightMovement extends Movement {
         this.valid = toClone.valid;
     }
 
+    @Override
+
     public boolean update(){
-        return update(true);
+        return update(0,new HashSet<>());
     }
 
-    public boolean update(boolean propagate){
-        saveCost();
-        boolean updated;
-        Cell origCell = Cell.getCell(origin);
-        Cell destCell = Cell.getCell(dest);
+    @Override
+    public boolean update(int dept, Set<Updatable> visited){
+        if(visited.contains(this))
+            return false;
+        visited.add(this);
+        double oldCost = this.cost;
+        boolean updated = false;
+
+        if(dept>0){
+            BlockCell.getCell(origin).update(dept-1,visited);
+            BlockCell.getCell(dest).update(dept-1,visited);
+        }
+
+        Cell origCell = BlockCell.getCell(origin);
+        Cell destCell = BlockCell.getCell(dest);
         if(origCell != null && origCell.isValid() && destCell != null && destCell.isValid()) {
             Location loc = dest;
             Block top = loc.clone().add(0, 1, 0).getBlock();
@@ -77,11 +91,17 @@ public abstract class StraightMovement extends Movement {
             valid = false;
             cost = Double.POSITIVE_INFINITY;
         }
-        if (updated && propagate) {
-            Cell.getCell(origin).update(false);
-            Cell.getCell(dest).update(false);
+        if(updated){
+            this.oldCost = oldCost;
+            emit(this);
         }
         return updated;
+    }
+
+    double oldCost = Double.POSITIVE_INFINITY;
+    @Override
+    public double getOldCost() {
+        return oldCost;
     }
 
     @Override

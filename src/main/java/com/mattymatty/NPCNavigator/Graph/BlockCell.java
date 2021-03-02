@@ -1,5 +1,8 @@
 package com.mattymatty.NPCNavigator.Graph;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.mattymatty.NPCNavigator.Graph.Movements.*;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
@@ -7,9 +10,28 @@ import org.bukkit.block.data.type.Door;
 
 import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class BlockCell extends Cell {
+
+    public static final LoadingCache<Location, Cell> cellCache = CacheBuilder.newBuilder().softValues()
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build(new CacheLoader<>() {
+                @Override
+                public BlockCell load(Location key) throws Exception {
+                    return new BlockCell(key);
+                }
+            });
+
+    static {
+        Movement.registerType(BlockCell.class,Set.of(
+                EastMovement.class,
+                NorthMovement.class,
+                WestMovement.class,
+                SouthMovement.class
+        ));
+    }
 
     private final Location pos;
     private boolean valid;
@@ -17,6 +39,17 @@ public class BlockCell extends Cell {
     private final Set<Movement> outMovements;
     private Set<Block> affectedBlocks;
 
+    public static Object getLock(){
+        return cellCache;
+    }
+
+    public static Cell getCell(Location loc) {
+        Cell cell;
+        synchronized (cellCache) {
+            cell = cellCache.getUnchecked(loc);
+        }
+        return cell;
+    }
 
 
     public Location getLocation() {
@@ -65,7 +98,11 @@ public class BlockCell extends Cell {
         this.affectedBlocks = toClone.getAffectedBlocks();
     }
 
-    public boolean update(boolean propagate){
+    @Override
+    public boolean update(int dept, Set<Updatable> visited){
+        if(visited.contains(this))
+            return false;
+        visited.add(this);
         boolean updated;
         Block top = pos.clone().add(0, 1, 0).getBlock();
         Block bottom = pos.getBlock();
@@ -84,10 +121,10 @@ public class BlockCell extends Cell {
             updated = valid;
             valid = false;
         }
-        if(propagate) {
-            updated = updated | inMovements.stream().map((m) -> m.update(false)).anyMatch((p) -> p);
-            updated = updated | outMovements.stream().map((m) -> m.update(false)).anyMatch((p) -> p);
-        }
+
+        updated = updated | inMovements.stream().map((m) -> m.update(dept,visited)).anyMatch((p) -> p);
+        updated = updated | outMovements.stream().map((m) -> m.update(dept,visited)).anyMatch((p) -> p);
+
         return updated;
     }
 

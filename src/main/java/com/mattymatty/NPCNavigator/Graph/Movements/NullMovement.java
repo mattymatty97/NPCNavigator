@@ -2,12 +2,14 @@ package com.mattymatty.NPCNavigator.Graph.Movements;
 
 import com.mattymatty.NPCNavigator.Graph.Cell;
 import com.mattymatty.NPCNavigator.Graph.Movement;
+import com.mattymatty.NPCNavigator.Graph.Updatable;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.util.Vector;
 
 import java.lang.ref.WeakReference;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 public class NullMovement extends StraightMovement {
@@ -39,11 +41,13 @@ public class NullMovement extends StraightMovement {
         this.cell = new WeakReference<>(toClone.cell.get());
     }
 
+    @Override
     public boolean update() {
-        return update(true);
+        return update(0, new HashSet<>());
     }
 
-    public boolean update(boolean propagate) {
+    @Override
+    public boolean update(int dept, Set<Updatable> visited) {
         return false;
     }
 

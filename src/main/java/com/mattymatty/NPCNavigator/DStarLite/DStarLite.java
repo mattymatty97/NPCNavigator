@@ -1,6 +1,7 @@
 package com.mattymatty.NPCNavigator.DStarLite;
 
 
+import com.mattymatty.NPCNavigator.Graph.BlockCell;
 import com.mattymatty.NPCNavigator.Graph.Cell;
 import com.mattymatty.NPCNavigator.Graph.Movement;
 import com.mattymatty.NPCNavigator.Graph.Movements.NullMovement;
@@ -12,7 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 
-public class DStarLite {
+public class DStarLite<T extends Cell> {
 
     List<Movement> curPath = new LinkedList<>();
     List<Movement> path = Collections.emptyList();
@@ -74,20 +75,22 @@ public class DStarLite {
 
     }
 
-    public void updateEdge(Movement mov)
+    public void updateEdge(Movement mov,double oldCost)
     {
         State u = new State(mov.getOrigin());
         State v = new State(mov.getDest());
-        if(mov.getOldCost() > mov.getCost()){
-            if(u.neq(s_goal)){
-                setRHS(u,Math.min(getRHS(u),mov.getCost() + getG(v)));
+        if(cellMap.containsKey(u)) {
+            if (oldCost > mov.getCost()) {
+                if (u.neq(s_goal)) {
+                    setRHS(u, Math.min(getRHS(u), mov.getCost() + getG(v)));
+                }
+            } else if (getRHS(u) == oldCost + getG(v)) {
+                if (u.neq(s_goal)) {
+                    setRHS(u, minRHSSuccesssors(u));
+                }
             }
-        }else if (getRHS(u) == mov.getOldCost() + getG(v)){
-            if(u.neq(s_goal)){
-                setRHS(u,minRHSSuccesssors(u));
-            }
+            updateVertex(u);
         }
-        updateVertex(u);
     }
 
     private State calculateKey(State u) {
@@ -155,12 +158,12 @@ public class DStarLite {
         return (NPCNavigator.instance.approxCost)? Utils.approx3dDistance(a.getVector(), b.getVector()): Utils.trueDist3D(a.getVector(),b.getVector());
     }
 
-    HashMap<Location,Cell> snapshots = new HashMap<>();
+    Map<Location,Cell> snapshots = new HashMap<>();
 
 
-    public boolean replan() {
+    public boolean replan(Map<Location,Cell> snapshots) {
         curPath.clear();
-        snapshots.clear();
+        this.snapshots = snapshots;
 
         int res = computeShortestPath();
         if (res < 0) {
@@ -324,7 +327,7 @@ public class DStarLite {
     private Cell getCell(State u){
         Cell snapshot = snapshots.get(u.getLocation());
         if(snapshot == null){
-            snapshot = Cell.getCell(u.getLocation()).clone();
+            snapshot = T.getCell(u.getLocation()).clone();
             snapshots.put(u.getLocation(),snapshot);
         }
         return snapshot;

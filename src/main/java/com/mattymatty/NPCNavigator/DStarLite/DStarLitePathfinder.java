@@ -1,12 +1,20 @@
 package com.mattymatty.NPCNavigator.DStarLite;
 
+import com.google.common.cache.Cache;
+import com.mattymatty.NPCNavigator.Graph.BlockCell;
 import com.mattymatty.NPCNavigator.Graph.Cell;
+import com.mattymatty.NPCNavigator.Graph.Movement;
+import com.mattymatty.NPCNavigator.Graph.UpdateListener;
 import org.bukkit.Location;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
-public class DStarLitePathfinder {
+public class DStarLitePathfinder<T extends Cell>{
     private static int threadCount = 0;
     private static final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),r -> {
         final Thread thread = new Thread(r);
@@ -18,12 +26,18 @@ public class DStarLitePathfinder {
         return thread;
     });
 
-    private DStarLite instance;
+    public static DStarLitePathfinder newDefaultPathfinder(){
+        return new DStarLitePathfinder<>(BlockCell.class);
+    }
+
+    private DStarLite<T> instance;
     private final Object lock = new Object();
     private Status status = Status.Idle;
+    private Class<T> cellType;
 
-    public DStarLitePathfinder() {
-        instance = new DStarLite();
+    public DStarLitePathfinder(Class<T> cellType) {
+        instance = new DStarLite<T>();
+        this.cellType = cellType;
     }
 
     public DStarLitePathfinder init(Location start, Location goal){
@@ -39,12 +53,17 @@ public class DStarLitePathfinder {
         return this;
     }
 
+    UpdateListener listener;
+
     public DStarLitePathfinder start(){
         if(getStatus()==Status.Idle) {
+            listener = Movement.addListener(cellType,(mov)-> updatedMoves.computeIfAbsent(mov,Movement::getOldCost));
             update();
         }
         return this;
     }
+
+    private final HashMap<Movement,Double> updatedMoves = new HashMap<>();
 
     private void update() {
         synchronized (lock) {
@@ -53,7 +72,18 @@ public class DStarLitePathfinder {
                 executor.submit(() -> {
                     try {
                         setStatus(Status.Calculating);
-                        instance.replan();
+                        Map<Location,Cell> snapshots;
+                        synchronized (T.getLock()){
+                            snapshots = ((Cache<Location, Cell>)T.getLock()).asMap().entrySet().parallelStream().collect(Collectors.toMap(
+                                    Map.Entry::getKey,
+                                    (Map.Entry<Location,Cell> e)->e.getValue().clone()
+                            ));
+                            updatedMoves.forEach((m,cost)->{
+                                instance.updateEdge(m,cost);
+                            });
+                            updatedMoves.clear();
+                        }
+                        instance.replan(snapshots);
                         synchronized (lock) {
                             setStatus(Status.Ready);
                             current = instance.path.get(0).getOrigin();
@@ -87,8 +117,8 @@ public class DStarLitePathfinder {
                 synchronized (lock) {
                     instance.updateStart(current);
                     if(currentIndex+1 < instance.path.size()) {
-                        Cell nextCell = Cell.getCell(instance.path.get(currentIndex++).getDest());
-                        if (Cell.update(nextCell,2)) {
+                        Cell nextCell = BlockCell.getCell(instance.path.get(currentIndex++).getDest());
+                        if (makeUpdate(nextCell)) {
                             update();
                         } else {
                             current = nextCell.getLocation();
@@ -106,6 +136,11 @@ public class DStarLitePathfinder {
         return current;
     }
 
+    private boolean makeUpdate(Cell cell){
+        synchronized (T.getLock()){
+            return cell.update(0,new HashSet<>());
+        }
+    }
 
     public Status getStatus(){
         synchronized (lock) {
@@ -115,7 +150,10 @@ public class DStarLitePathfinder {
 
     private Status setStatus(Status status){
         synchronized (lock) {
+            if(status==Status.Done)
+                Movement.removeListener(listener);
             return this.status = status;
+
         }
     }
 
@@ -126,4 +164,5 @@ public class DStarLitePathfinder {
         Ready,
         Done
     }
+
 }

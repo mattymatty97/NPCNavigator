@@ -1,6 +1,5 @@
 package com.mattymatty.NPCNavigator;
 
-import com.mattymatty.NPCNavigator.DStarLite.DStarLite;
 import com.mattymatty.NPCNavigator.DStarLite.DStarLitePathfinder;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -15,7 +14,6 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 @SuppressWarnings("Duplicates")
 public class Commands implements CommandExecutor {
@@ -61,7 +59,7 @@ public class Commands implements CommandExecutor {
                         long stime = System.currentTimeMillis();
 
                         sender.sendMessage("Starting path");
-                        DStarLitePathfinder pathfinder = new DStarLitePathfinder();
+                        DStarLitePathfinder pathfinder = DStarLitePathfinder.newDefaultPathfinder();
 
                         pathfinder.init(pos1.toBlockLocation(), pos2.toBlockLocation()).start();
                         LinkedList<Location> path = new LinkedList<Location>();
