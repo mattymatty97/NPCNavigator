@@ -1,15 +1,12 @@
 package com.mattymatty.NPCNavigator.DStarLite;
 
-import com.google.common.cache.Cache;
-import com.mattymatty.NPCNavigator.Graph.BlockCell;
 import com.mattymatty.NPCNavigator.Graph.Cell;
 import com.mattymatty.NPCNavigator.Graph.Movement;
+import com.mattymatty.NPCNavigator.Graph.Movements.NullMovement;
 import com.mattymatty.NPCNavigator.Graph.UpdateListener;
 import org.bukkit.Location;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -54,32 +51,23 @@ public class DStarLitePathfinder{
 
     public DStarLitePathfinder start(){
         if(getStatus()==Status.Idle) {
-            listener = Movement.addListener((mov)-> updatedMoves.computeIfAbsent(mov,Movement::getOldCost));
+            listener = Movement.addListener((mov)-> instance.updateEdge(mov, mov.getOldCost()));
             update();
         }
         return this;
     }
 
-    private final HashMap<Movement,Double> updatedMoves = new HashMap<>();
-
     private void update() {
         synchronized (lock) {
-            if (status != Status.Queued && status != Status.Calculating) {
+            if (status == Status.Idle || status == Status.Ready) {
                 setStatus(Status.Queued);
                 executor.submit(() -> {
                     try {
                         setStatus(Status.Calculating);
-                        synchronized (Cell.getLock()){
-                            updatedMoves.forEach((m,cost)->{
-                                instance.updateEdge(m,cost);
-                            });
-                            updatedMoves.clear();
-                        }
-                        instance.replan();
+                        instance.computeShortestPath();
                         synchronized (lock) {
                             setStatus(Status.Ready);
-                            current = instance.path.get(0).getOrigin();
-                            currentIndex = 0;
+                            current = instance.getCurr();
                         }
                     }catch (Exception ex){
                         ex.printStackTrace();
@@ -91,7 +79,6 @@ public class DStarLitePathfinder{
 
 
     private Location current;
-    private int currentIndex = 0;
 
     private Location getCurrent(){
         synchronized (lock) {
@@ -99,32 +86,24 @@ public class DStarLitePathfinder{
         }
     }
 
-    public Location current(){
-        return getCurrent();
-    }
-
     public Location next(){
         if(getStatus()==Status.Ready){
-            if(instance.path.size() > 0) {
                 synchronized (lock) {
-                    instance.updateStart(current);
-                    if(currentIndex+1 < instance.path.size()) {
-                        Cell nextCell = Cell.getCell(instance.path.get(currentIndex++).getDest());
-                        if (makeUpdate(nextCell) || updatedMoves.size()>0) {
-                            update();
-                        } else {
-                            current = nextCell.getLocation();
-                        }
-                    }else{
+                    Movement next = instance.getNext();
+                    if(next instanceof NullMovement) {
                         setStatus(Status.Done);
-                        current = instance.path.get(currentIndex).getDest();
-                        instance = null;
-                        System.gc();
+                        return null;
+                    }
+                    instance.updateStart(current);
+                    Cell nextCell = Cell.getCell(next.getDest());
+                    if (makeUpdate(nextCell)) {
+                        update();
+                    } else {
+                        current = nextCell.getLocation();
+                        if(next.getDest().equals(instance.getGoal()))
+                            setStatus(Status.Done);
                     }
                 }
-            }else{
-                return null;
-            }
         }
         return current;
     }
@@ -143,10 +122,11 @@ public class DStarLitePathfinder{
 
     private Status setStatus(Status status){
         synchronized (lock) {
-            if(status==Status.Done)
+            if(status==Status.Done) {
                 Movement.removeListener(listener);
+                instance.end();
+            }
             return this.status = status;
-
         }
     }
 
