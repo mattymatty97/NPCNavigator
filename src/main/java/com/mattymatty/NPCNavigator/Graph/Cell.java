@@ -1,18 +1,34 @@
 package com.mattymatty.NPCNavigator.Graph;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import org.bukkit.Location;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public abstract class Cell  implements Cloneable,Updatable{
 
+    protected static final LoadingCache<Location, Cell> cellCache = CacheBuilder.newBuilder().softValues()
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build(new CacheLoader<Location, Cell>() {
+                @Override
+                public BlockCell load(Location key) throws Exception {
+                    return new BlockCell(key);
+                }
+            });;
+
     public static Object getLock(){
-        throw new RuntimeException("Cell isn't implemented");
+        return cellCache;
     }
 
     public static Cell getCell(Location loc){
-        throw new RuntimeException("Cell isn't implemented");
+        synchronized (cellCache){
+            return cellCache.getUnchecked(loc);
+        }
     };
 
     public abstract Location getLocation();

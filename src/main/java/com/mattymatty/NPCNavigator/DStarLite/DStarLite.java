@@ -13,7 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 
-public class DStarLite<T extends Cell> {
+public class DStarLite {
 
     List<Movement> curPath = new LinkedList<>();
     List<Movement> path = Collections.emptyList();
@@ -45,7 +45,11 @@ public class DStarLite<T extends Cell> {
         s_goal.setLocation(goal);
 
         if(path.size()==0)
-            path = List.of(new NullMovement(getCell(s_start)));
+            path = new LinkedList<Movement>(){
+                {
+                    add(new NullMovement(getCell(s_start)));
+                }
+            };
 
         k_m = 0;
 
@@ -78,19 +82,17 @@ public class DStarLite<T extends Cell> {
     public void updateEdge(Movement mov,double oldCost)
     {
         State u = new State(mov.getOrigin());
-        State v = new State(mov.getDest());
-        if(cellMap.containsKey(u)) {
-            if (oldCost > mov.getCost()) {
-                if (u.neq(s_goal)) {
-                    setRHS(u, Math.min(getRHS(u), mov.getCost() + getG(v)));
-                }
-            } else if (getRHS(u) == oldCost + getG(v)) {
-                if (u.neq(s_goal)) {
-                    setRHS(u, minRHSSuccesssors(u));
-                }
-            }
-            updateVertex(u);
-        }
+		State v = new State(mov.getDest());
+		if (oldCost > mov.getCost()) {
+			if (u.neq(s_goal)) {
+				setRHS(u, Math.min(getRHS(u), mov.getCost() + getG(v)));
+			}
+		} else if (getRHS(u) == oldCost + getG(v)) {
+			if (u.neq(s_goal)) {
+				setRHS(u, minRHSSuccesssors(u));
+			}
+		}
+        updateVertex(u);
     }
 
     private State calculateKey(State u) {
@@ -161,61 +163,92 @@ public class DStarLite<T extends Cell> {
     Map<Location,Cell> snapshots = new HashMap<>();
 
 
-    public boolean replan(Map<Location,Cell> snapshots) {
+    public boolean replan() {
         curPath.clear();
-        this.snapshots = snapshots;
+        this.snapshots.clear();
 
         int res = computeShortestPath();
         if (res < 0) {
             System.out.println("No Path to Goal");
+            path = new LinkedList<Movement>(){
+                {
+                    add(new NullMovement(getCell(s_start)));
+                }
+            };
             return false;
         }
 
         List<Movement> n;
         State cur = s_start;
 
-        /*
-        if (getG(s_start) == Double.POSITIVE_INFINITY) {
+        if (getRHS(s_start) == Double.POSITIVE_INFINITY) {
             System.out.println("No Path to Goal");
+            path = new LinkedList<Movement>(){
+                {
+                    add(new NullMovement(getCell(s_start)));
+                }
+            };
             return false;
-        }*/
+        }
 
+        int k=0;
         while (cur.neq(s_goal)) {
+            if (k++ > maxCalc) {
+                System.out.println("At Max Try, second");
+                path = new LinkedList<Movement>(){
+                    {
+                        add(new NullMovement(getCell(s_start)));
+                    }
+                };
+                return false;
+            }
             n = getSucc(cur);
 
             if (n.isEmpty()) {
                 System.out.println("No Path to Goal");
+                path = new LinkedList<Movement>(){
+                    {
+                        add(new NullMovement(getCell(s_start)));
+                    }
+                };
                 return false;
             }
 
             double cmin = Double.POSITIVE_INFINITY;
-            double tmin = 0;
-            State smin = new State();
+            double tmin = Double.POSITIVE_INFINITY;
+            State smin = null;
             Movement mmin = null;
 
             for (Movement m : n) {
+                if(curPath.contains(m))
+                    continue;
                 State i = new State(m.getDest());
-                double val = m.getCost();
-                double val2 = Utils.trueDist3D(i.getVector(), s_goal.getVector()) + Utils.trueDist3D(s_start.getVector(), i.getVector());
-                val += getG(i);
+                double val = m.getCost() + getG(i);
+				double val2 = Utils.trueDist3D(i.getVector(),s_goal.getVector()) + Utils.trueDist3D(s_start.getVector(), i.getVector());
 
-                if (close(val, cmin)) {
-                    if (tmin > val2) {
-                        tmin = val2;
-                        cmin = val;
-                        smin = i;
-                        mmin = m;
-                    }
-                } else if (val < cmin) {
-                    tmin = val2;
-                    cmin = val;
-                    smin = i;
-                    mmin = m;
-                }
+                if (val==cmin) {
+					if (tmin > val2) {
+						tmin = val2;
+						cmin = val;
+						smin = i;
+						mmin = m;
+					}
+				} else if (val < cmin) {
+					tmin = val2;
+					cmin = val;
+					smin = i;
+					mmin = m;
+				}
             }
-            n.clear();
-            if(smin.getLocation().getWorld() == null){
+			n.clear();
+			
+            if(smin == null){
                 System.out.println("No Path to Goal");
+                path = new LinkedList<Movement>(){
+                    {
+                        add(new NullMovement(getCell(s_start)));
+                    }
+                };
                 return false;
             }
             cur = new State(smin);
@@ -223,7 +256,7 @@ public class DStarLite<T extends Cell> {
             //cur = smin;
         }
         snapshots.clear();
-        path = List.copyOf(curPath);
+        path = new LinkedList<>(curPath);
         return true;
     }
 
@@ -236,6 +269,15 @@ public class DStarLite<T extends Cell> {
         if (openList.isEmpty()) return 1;
 
         int k = 0;
+
+        while (!openList.isEmpty()) {
+            State u = openList.peek();
+            if (openHash.contains(u))
+                break;
+            else
+                openList.poll();
+        }
+
         while ((!openList.isEmpty()) && (
                 (openList.peek().lt(calculateKey(s_start))) ||
                         (getRHS(s_start) > getG(s_start))
@@ -246,14 +288,7 @@ public class DStarLite<T extends Cell> {
                 return -1;
             }
 
-            State u = null;
-
-            while (!openList.isEmpty()) {
-                u = openList.poll();
-                if (openHash.contains(u))
-                    break;
-            }
-
+            State u = openList.poll();
             assert u != null : "list was empty";
             State k_old = new State(u);
 
@@ -261,7 +296,7 @@ public class DStarLite<T extends Cell> {
                 openList.add(u); //update u
             } else if (getG(u) > getRHS(u)) { //needs update (got better)
                 setG(u, getRHS(u));
-                openHash.remove(u); //remove from open set
+                openHash.remove(u);
 
                 mov = getPred(u);
                 for (Movement m : mov) {
@@ -286,6 +321,15 @@ public class DStarLite<T extends Cell> {
                     updateVertex(i);
                 }
             }
+
+            while (!openList.isEmpty()) {
+                u = openList.peek();
+                if (openHash.contains(u))
+                    break;
+                else
+                    openList.poll();
+            }
+
         } //while
         return 0;
     }
@@ -307,10 +351,9 @@ public class DStarLite<T extends Cell> {
     private void updateVertex(State u) {
         if (openHash.contains(u)) {
             if (getG(u) != getRHS(u)) {
-                openHash.remove(u);
+                openList.remove(u);
                 calculateKey(u);
                 openList.add(u);
-                openHash.add(u);
             } else {
                 openList.remove(u);
                 openHash.remove(u);
@@ -325,12 +368,13 @@ public class DStarLite<T extends Cell> {
     }
 
     private Cell getCell(State u){
-        Cell snapshot = snapshots.get(u.getLocation());
+        /*Cell snapshot = snapshots.get(u.getLocation());
         if(snapshot == null){
-            snapshot = T.getCell(u.getLocation()).clone();
+            snapshot = Cell.getCell(u.getLocation()).clone();
             snapshots.put(u.getLocation(),snapshot);
         }
-        return snapshot;
+        return snapshot;*/
+        return Cell.getCell(u.getLocation());
     }
 
     /*
@@ -349,18 +393,6 @@ public class DStarLite<T extends Cell> {
      */
     private List<Movement> getSucc(State u) {
         return getCell(u).getOutMovements().stream().filter(Movement::isValid).collect(Collectors.toList());
-    }
-
-    /*
-     * Returns true if x and y are within 10E-5, false otherwise
-     */
-    private boolean close(double x, double y) {
-        if (x == Double.POSITIVE_INFINITY && y == Double.POSITIVE_INFINITY) return true;
-        return (Math.abs(x - y) < 0.00001);
-    }
-
-    public List<Movement> getCurPath() {
-        return Collections.unmodifiableList(curPath);
     }
 
 }

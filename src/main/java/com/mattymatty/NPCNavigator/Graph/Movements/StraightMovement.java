@@ -7,6 +7,7 @@ import com.mattymatty.NPCNavigator.Graph.Updatable;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Door;
+import org.bukkit.util.Vector;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -56,21 +57,26 @@ public abstract class StraightMovement extends Movement {
         visited.add(this);
         double oldCost = this.cost;
         boolean updated = false;
+        boolean propagate_update = false;
 
         if(dept>0){
-            BlockCell.getCell(origin).update(dept-1,visited);
-            BlockCell.getCell(dest).update(dept-1,visited);
+            propagate_update = Cell.getCell(origin).update(dept-1,visited);
+            propagate_update = propagate_update || Cell.getCell(dest).update(dept-1,visited);
         }
 
-        Cell origCell = BlockCell.getCell(origin);
-        Cell destCell = BlockCell.getCell(dest);
-        if(origCell != null && origCell.isValid() && destCell != null && destCell.isValid()) {
+        Cell origCell = Cell.getCell(origin);
+        Cell destCell = Cell.getCell(dest);
+        if(origCell.isValid() && destCell.isValid()) {
             Location loc = dest;
             Block top = loc.clone().add(0, 1, 0).getBlock();
             Block bottom = loc.getBlock();
             Block ground = loc.clone().add(0, -1, 0).getBlock();
 
-            affectedBlocks = Set.of(top, bottom, ground);
+            affectedBlocks = new HashSet<Block>(){{
+                add(top);
+                add(bottom);
+                add(ground);
+            }};
 
             if (
                     (top.isPassable() || top.getType().data == Door.class) &&
@@ -95,7 +101,7 @@ public abstract class StraightMovement extends Movement {
             this.oldCost = oldCost;
             emit(this);
         }
-        return updated;
+        return updated || propagate_update;
     }
 
     double oldCost = Double.POSITIVE_INFINITY;

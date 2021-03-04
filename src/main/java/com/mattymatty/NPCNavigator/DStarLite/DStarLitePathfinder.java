@@ -12,9 +12,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
 
-public class DStarLitePathfinder<T extends Cell>{
+public class DStarLitePathfinder{
     private static int threadCount = 0;
     private static final ExecutorService executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),r -> {
         final Thread thread = new Thread(r);
@@ -27,17 +26,15 @@ public class DStarLitePathfinder<T extends Cell>{
     });
 
     public static DStarLitePathfinder newDefaultPathfinder(){
-        return new DStarLitePathfinder<>(BlockCell.class);
+        return new DStarLitePathfinder();
     }
 
-    private DStarLite<T> instance;
+    private DStarLite instance;
     private final Object lock = new Object();
     private Status status = Status.Idle;
-    private Class<T> cellType;
 
-    public DStarLitePathfinder(Class<T> cellType) {
-        instance = new DStarLite<T>();
-        this.cellType = cellType;
+    public DStarLitePathfinder() {
+        instance = new DStarLite();
     }
 
     public DStarLitePathfinder init(Location start, Location goal){
@@ -57,7 +54,7 @@ public class DStarLitePathfinder<T extends Cell>{
 
     public DStarLitePathfinder start(){
         if(getStatus()==Status.Idle) {
-            listener = Movement.addListener(cellType,(mov)-> updatedMoves.computeIfAbsent(mov,Movement::getOldCost));
+            listener = Movement.addListener((mov)-> updatedMoves.computeIfAbsent(mov,Movement::getOldCost));
             update();
         }
         return this;
@@ -72,18 +69,13 @@ public class DStarLitePathfinder<T extends Cell>{
                 executor.submit(() -> {
                     try {
                         setStatus(Status.Calculating);
-                        Map<Location,Cell> snapshots;
-                        synchronized (T.getLock()){
-                            snapshots = ((Cache<Location, Cell>)T.getLock()).asMap().entrySet().parallelStream().collect(Collectors.toMap(
-                                    Map.Entry::getKey,
-                                    (Map.Entry<Location,Cell> e)->e.getValue().clone()
-                            ));
+                        synchronized (Cell.getLock()){
                             updatedMoves.forEach((m,cost)->{
                                 instance.updateEdge(m,cost);
                             });
                             updatedMoves.clear();
                         }
-                        instance.replan(snapshots);
+                        instance.replan();
                         synchronized (lock) {
                             setStatus(Status.Ready);
                             current = instance.path.get(0).getOrigin();
@@ -117,14 +109,15 @@ public class DStarLitePathfinder<T extends Cell>{
                 synchronized (lock) {
                     instance.updateStart(current);
                     if(currentIndex+1 < instance.path.size()) {
-                        Cell nextCell = BlockCell.getCell(instance.path.get(currentIndex++).getDest());
-                        if (makeUpdate(nextCell)) {
+                        Cell nextCell = Cell.getCell(instance.path.get(currentIndex++).getDest());
+                        if (makeUpdate(nextCell) || updatedMoves.size()>0) {
                             update();
                         } else {
                             current = nextCell.getLocation();
                         }
                     }else{
                         setStatus(Status.Done);
+                        current = instance.path.get(currentIndex).getDest();
                         instance = null;
                         System.gc();
                     }
@@ -137,7 +130,7 @@ public class DStarLitePathfinder<T extends Cell>{
     }
 
     private boolean makeUpdate(Cell cell){
-        synchronized (T.getLock()){
+        synchronized (Cell.getLock()){
             return cell.update(0,new HashSet<>());
         }
     }

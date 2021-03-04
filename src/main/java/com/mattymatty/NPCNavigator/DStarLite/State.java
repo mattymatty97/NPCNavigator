@@ -1,6 +1,7 @@
 package com.mattymatty.NPCNavigator.DStarLite;
 
 import com.mattymatty.NPCNavigator.Utils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.MutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Location;
@@ -9,8 +10,22 @@ import org.bukkit.util.Vector;
 public class State implements Comparable<State>, java.io.Serializable
 {
     private Location location;
-    public MutablePair<Double, Double> k = new MutablePair<>(Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY);
+    public Key k = new Key(Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY);
 
+    public class Key extends MutablePair<Double,Double> {
+        /**
+         * Create a new pair instance.
+         *
+         * @param left  the left value, may be null
+         * @param right the right value, may be null
+         */
+        public Key(Double left, Double right) {
+            super(left, right);
+        }
+        public Key(Key other) {
+            super(other.left, other.right);
+        }
+    }
 
     //Default constructor
     public State()
@@ -24,10 +39,10 @@ public class State implements Comparable<State>, java.io.Serializable
     }
 
     //Overloaded constructor
-    public State(Location loc, MutablePair<Double,Double> k)
+    public State(Location loc, Key k)
     {
         location = loc.clone();
-        this.k = k;
+        this.k = new Key(k.left, k.right);
     }
 
 
@@ -35,7 +50,7 @@ public class State implements Comparable<State>, java.io.Serializable
     public State(State other)
     {
         location = other.getLocation();
-        this.k = other.k;
+        this.k = new Key(k);
     }
 
     public State setLocation(Location location) {
@@ -76,10 +91,10 @@ public class State implements Comparable<State>, java.io.Serializable
     }
 
     //Greater than
-    public boolean gt( State s2)
+    public boolean gt(State s2)
     {
-        if (k.getLeft()-0.00001 > s2.k.getLeft()) return true;
-        else if (k.getLeft() < s2.k.getLeft()-0.00001) return false;
+        if (k.getLeft() > s2.k.getLeft()) return true;
+        if (k.getLeft() < s2.k.getLeft()) return false;
         return k.getRight() > s2.k.getRight();
     }
 
@@ -87,15 +102,15 @@ public class State implements Comparable<State>, java.io.Serializable
     public boolean lte(State s2)
     {
         if (k.getLeft() < s2.k.getLeft()) return true;
-        else if (k.getLeft() > s2.k.getLeft()) return false;
-        return k.getRight() < s2.k.getRight() + 0.00001;
+        if (k.getLeft() > s2.k.getLeft()) return false;
+        return k.getRight() <= s2.k.getRight();
     }
 
     //Less than
     public boolean lt(State s2)
     {
-        if (k.getLeft() + 0.000001 < s2.k.getLeft()) return true;
-        else if (k.getLeft() - 0.000001 > s2.k.getLeft()) return false;
+        if (k.getLeft() < s2.k.getLeft()) return true;
+        if (k.getLeft() > s2.k.getLeft()) return false;
         return k.getRight() < s2.k.getRight();
     }
 
@@ -103,10 +118,10 @@ public class State implements Comparable<State>, java.io.Serializable
     public int compareTo(State other)
     {
         //This is a modified version of the gt method
-        if (k.getLeft()-0.00001 > other.k.getLeft()) return 1;
-        else if (k.getLeft() < other.k.getLeft()-0.00001) return -1;
+        if (k.getLeft() > other.k.getLeft()) return 1;
+        if (k.getLeft() < other.k.getLeft()) return -1;
         if (k.getRight() > other.k.getRight()) return 1;
-        else if (k.getRight() < other.k.getRight()) return -1;
+        if (k.getRight() < other.k.getRight()) return -1;
         return 0;
     }
 

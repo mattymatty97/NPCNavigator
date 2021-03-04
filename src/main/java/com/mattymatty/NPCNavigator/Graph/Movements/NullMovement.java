@@ -12,33 +12,35 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-public class NullMovement extends StraightMovement {
+public class NullMovement extends Movement {
 
     private static final Vector vector = new Vector(0, 0, 0);
 
     private final Location origin;
     private final Location dest;
-    private final WeakReference<Cell> cell;
     private double cost;
     private boolean valid;
 
 
     public NullMovement(Cell cell) {
-        super(cell,false);
-        this.cell = new WeakReference<Cell>(cell);
         dest = cell.getLocation();
         origin = cell.getLocation();
         valid = true;
         cost = 0;
     }
 
+    public NullMovement(Location loc) {
+        dest = loc;
+        origin = loc;
+        valid = true;
+        cost = 0;
+    }
+
     public NullMovement(NullMovement toClone) {
-        super(toClone);
         this.origin = toClone.origin.clone();
         this.dest = toClone.origin.clone();
         this.valid = true;
-        this.cost = 0;
-        this.cell = new WeakReference<>(toClone.cell.get());
+        this.cost =  0;
     }
 
     @Override

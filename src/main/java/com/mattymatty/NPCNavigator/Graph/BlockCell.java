@@ -1,56 +1,25 @@
 package com.mattymatty.NPCNavigator.Graph;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.mattymatty.NPCNavigator.Graph.Movements.*;
+import com.mattymatty.NPCNavigator.Graph.Movements.EastMovement;
+import com.mattymatty.NPCNavigator.Graph.Movements.NorthMovement;
+import com.mattymatty.NPCNavigator.Graph.Movements.SouthMovement;
+import com.mattymatty.NPCNavigator.Graph.Movements.WestMovement;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.type.Door;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class BlockCell extends Cell {
-
-    public static final LoadingCache<Location, Cell> cellCache = CacheBuilder.newBuilder().softValues()
-            .expireAfterAccess(1, TimeUnit.HOURS)
-            .build(new CacheLoader<>() {
-                @Override
-                public BlockCell load(Location key) throws Exception {
-                    return new BlockCell(key);
-                }
-            });
-
-    static {
-        Movement.registerType(BlockCell.class,Set.of(
-                EastMovement.class,
-                NorthMovement.class,
-                WestMovement.class,
-                SouthMovement.class
-        ));
-    }
 
     private final Location pos;
     private boolean valid;
     private final Set<Movement> inMovements;
     private final Set<Movement> outMovements;
     private Set<Block> affectedBlocks;
-
-    public static Object getLock(){
-        return cellCache;
-    }
-
-    public static Cell getCell(Location loc) {
-        Cell cell;
-        synchronized (cellCache) {
-            cell = cellCache.getUnchecked(loc);
-        }
-        return cell;
-    }
-
 
     public Location getLocation() {
         return pos.clone();
@@ -75,18 +44,19 @@ public class BlockCell extends Cell {
     public BlockCell(Location pos) {
         this.pos = pos;
         valid = true;
-        inMovements = Set.of(
-                Movement.checkCache(new EastMovement(this,true)),
-                Movement.checkCache(new WestMovement(this,true)),
-                Movement.checkCache(new SouthMovement(this,true)),
-                Movement.checkCache(new NorthMovement(this,true))
-        );
-        outMovements = Set.of(
-                Movement.checkCache(new EastMovement(this,false)),
-                Movement.checkCache(new WestMovement(this,false)),
-                Movement.checkCache(new SouthMovement(this,false)),
-                Movement.checkCache(new NorthMovement(this,false))
-        );
+        BlockCell cell = this;
+        inMovements = new HashSet<Movement>() {{
+            add(Movement.checkCache(new EastMovement(cell, true)));
+            add(Movement.checkCache(new WestMovement(cell, true)));
+            add(Movement.checkCache(new SouthMovement(cell, true)));
+            add(Movement.checkCache(new NorthMovement(cell, true)));
+        }};
+        outMovements = new HashSet<Movement>() {{
+            add(Movement.checkCache(new EastMovement(cell, false)));
+            add(Movement.checkCache(new WestMovement(cell, false)));
+            add(Movement.checkCache(new SouthMovement(cell, false)));
+            add(Movement.checkCache(new NorthMovement(cell, false)));
+        }};
         affectedBlocks = Collections.emptySet();
     }
 
@@ -99,8 +69,8 @@ public class BlockCell extends Cell {
     }
 
     @Override
-    public boolean update(int dept, Set<Updatable> visited){
-        if(visited.contains(this))
+    public boolean update(int dept, Set<Updatable> visited) {
+        if (visited.contains(this))
             return false;
         visited.add(this);
         boolean updated;
@@ -108,7 +78,11 @@ public class BlockCell extends Cell {
         Block bottom = pos.getBlock();
         Block ground = pos.clone().add(0, -1, 0).getBlock();
 
-        affectedBlocks = Set.of(top, bottom, ground);
+        affectedBlocks = new HashSet<Block>(){{
+            add(top);
+            add(bottom);
+            add(ground);
+        }};
 
         if (
                 (top.isPassable() || top.getType().data == Door.class) &&
@@ -122,14 +96,14 @@ public class BlockCell extends Cell {
             valid = false;
         }
 
-        updated = updated | inMovements.stream().map((m) -> m.update(dept,visited)).anyMatch((p) -> p);
-        updated = updated | outMovements.stream().map((m) -> m.update(dept,visited)).anyMatch((p) -> p);
+        updated = updated || inMovements.stream().map((m) -> m.update(dept, visited)).anyMatch((p) -> p);
+        updated = updated || outMovements.stream().map((m) -> m.update(dept, visited)).anyMatch((p) -> p);
 
         return updated;
     }
 
     @Override
-    public BlockCell clone(){
+    public BlockCell clone() {
         return new BlockCell(this);
     }
 }

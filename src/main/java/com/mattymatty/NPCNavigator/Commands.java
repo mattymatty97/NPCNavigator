@@ -70,7 +70,7 @@ public class Commands implements CommandExecutor {
                             public void run() {
                                 Location next = pathfinder.next();
                                 if (next != null) {
-                                    if (next.toCenterLocation() != path.pollLast()) {
+                                    if (next.toCenterLocation() != path.peekLast()) {
                                         Location cur = next.toCenterLocation();
                                         path.add(cur);
                                         Objects.requireNonNull(cur.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, cur, 7);
@@ -80,7 +80,7 @@ public class Commands implements CommandExecutor {
                                     this.cancel();
                                 }
                             }
-                        }.runTaskTimer(NPCNavigator.instance,5,10);
+                        }.runTaskTimer(NPCNavigator.instance,5,5);
                         particles.add(particle);
                          particle = Bukkit.getServer().getScheduler().runTaskTimer(NPCNavigator.instance, () -> {
                             int i = 0;
@@ -91,7 +91,7 @@ public class Commands implements CommandExecutor {
                                     Objects.requireNonNull(act.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, act, 7);
                                     }, i * 10L);
                                 }
-                        }, 15, Math.max(10, Math.min(path.size() * 10, 140)));
+                        }, 15, 140);
                         particles.add(particle);
 
                         return true;

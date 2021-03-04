@@ -5,6 +5,9 @@ apply plugin: 'java'
 group = 'com.mattymatty'
 version = '0.0.1-SNAPSHOT'
 
+targetCompatibility = 1.8
+sourceCompatibility = 1.8
+
 repositories {
     mavenCentral()
     maven {
