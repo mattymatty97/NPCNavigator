@@ -13,8 +13,8 @@ import java.util.stream.Collectors;
 
 public class DStarLite {
 
-    private State s_start = new State();
-    private State s_goal = new State();
+    private Location s_start = null;
+    private Location s_goal = null;
 
     private int maxCalc = 0;
     private double k_m = 0;
@@ -22,10 +22,11 @@ public class DStarLite {
     private final Object lock = new Object();
     private boolean closed = false;
 
-    private  PriorityQueue<State> cellQueue = new PriorityQueue<>();
-    private  Set<State> cellHash = new HashSet<>();
+    private PriorityQueue<Location> cellQueue = new PriorityQueue<>(Comparator.comparing(this::getKey));
+    private Set<Location> cellHash = new HashSet<>();
 
-    public HashMap<State, CellInfo> cellMap = new HashMap<State, CellInfo>();
+    public HashMap<Location, Info> infoMap = new HashMap<>();
+    public HashMap<Location, Key> keyMap = new HashMap<>();
 
     private AtomicBoolean update = new AtomicBoolean(false);
 
@@ -35,15 +36,15 @@ public class DStarLite {
     }
 
     public void end(){
-        synchronized (lock) {
             cellQueue.clear();
             cellHash.clear();
-            cellMap.clear();
+            infoMap.clear();
+            keyMap.clear();
             cellQueue = null;
             cellHash = null;
-            cellMap = null;
+            infoMap = null;
+            keyMap = null;
             closed = true;
-        }
     }
 
     public void init(Location start, Location goal) {
@@ -53,12 +54,13 @@ public class DStarLite {
             cellQueue.clear();
             cellHash.clear();
             k_m = 0;
-            cellMap.clear();
-            s_goal = new State(goal);
-            s_start = new State(start);
+            infoMap.clear();
+            keyMap.clear();
+            s_goal = goal.clone();
+            s_start = start.clone();
             setRHS(s_goal, 0);
-            updateKey(s_goal);
-            updateKey(s_start);
+            calculateKey(s_goal);
+            calculateKey(s_start);
             cellQueue.add(s_goal);
             cellHash.add(s_goal);
             update.set(true);
@@ -66,76 +68,95 @@ public class DStarLite {
     }
 
     public void updateEdge(Movement edge,double oldCost){
-        synchronized (lock) {
             if (closed)
                 return;
-            State u = new State(edge.getOrigin());
-            State v = new State(edge.getDest());
+            Location u = edge.getOrigin();
+            Location v = edge.getDest();
             synchronized (cellQueue) {
-                if (cellMap.containsKey(u)) {
+                if (infoMap.containsKey(u)) {
                     if (oldCost > edge.getCost()) {
-                        if (u.neq(s_goal)) setRHS(u, Math.min(getRHS(u), edge.getCost() + getG(v)));
+                        if (!u.equals(s_goal)) setRHS(u, Math.min(getRHS(u), edge.getCost() + getG(v)));
                     } else if (getRHS(u) == oldCost + getG(v)) {
-                        if (u.neq(s_goal)) setRHS(u, minRHSSuccessors(u));
+                        if (!u.equals(s_goal)) setRHS(u, minRHSSuccessors(u));
                     }
                     updateVertex(u);
                     update.set(true);
                 }
             }
-        }
     }
 
     public void updateStart(Location loc){
         if(closed)
             return;
         synchronized (cellQueue) {
-            State snext = new State(loc);
-            k_m += heuristic(s_start, snext);
-            s_start = snext;
+            k_m += heuristic(s_start, loc);
+            s_start = loc;
         }
     }
 
     public Movement getNext(){
-        synchronized (lock) {
-            if (closed)
+            if (closed || getRHS(s_start) == Double.POSITIVE_INFINITY)
                 return new NullMovement(getCurr());
             ;
             synchronized (cellQueue) {
                 List<Movement> s = getSucc(s_start);
                 double cmin = Double.POSITIVE_INFINITY;
-                Movement mmin = new NullMovement(s_start.getLocation());
+                double tmin = Double.POSITIVE_INFINITY;
+                Movement mmin = new NullMovement(s_start);
                 double ctmp;
+                double ttmp;
 
                 for (Movement m : s) {
-                    State i = new State(m.getDest());
+                    Location i = m.getDest();
                     ctmp = getG(i) + m.getCost();
-                    if (ctmp < cmin) {
+
+                    if(close(cmin,ctmp)){
+                        ttmp = getTtmp(m);
+                        if(ttmp < tmin){
+                            cmin = ctmp;
+                            tmin = ttmp;
+                            mmin = m;
+                        }
+                    }else if (ctmp < cmin) {
                         cmin = ctmp;
+                        tmin = getTtmp(m);
                         mmin = m;
                     }
                 }
                 return mmin;
             }
-        }
+    }
+
+    /*
+     * Returns true if x and y are within 10E-5, false otherwise
+     */
+    private boolean close(double x, double y)
+    {
+        if (x == Double.POSITIVE_INFINITY && y == Double.POSITIVE_INFINITY) return true;
+        return (Math.abs(x-y) < 0.00001);
+    }
+
+    private double getTtmp(Movement m) {
+        return Utils.trueDist3D(m.getDest().toVector(), s_start.toVector()) + Utils.trueDist3D(m.getDest().toVector(), s_goal.toVector());
     }
 
     public Location getCurr(){
-        return s_start.getLocation();
+        return s_start.clone();
     }
     public Location getGoal(){
-        return s_goal.getLocation();
+        return s_goal.clone();
     }
 
     public boolean needsUpdate(){
         return update.get();
     }
 
-    private void updateVertex(State u){
+    private void updateVertex(Location u){
         double g = getG(u);
         double rhs = getRHS(u);
         if(cellHash.contains(u)){
             if(g!=rhs){
-                updateKey(u);
+                calculateKey(u);
                 cellQueue.remove(u);
                 cellQueue.add(u);
             }else{
@@ -144,7 +165,7 @@ public class DStarLite {
             }
         }else{
             if(g!=rhs){
-                updateKey(u);
+                calculateKey(u);
                 cellQueue.add(u);
                 cellHash.add(u);
             }
@@ -152,16 +173,20 @@ public class DStarLite {
     }
 
     public int computeShortestPath(){
-        synchronized (lock) {
-            if(closed)
+            if(closed) {
+                update.set(false);
                 return -5;
-            if (cellQueue.isEmpty()) return 1;
+            }
+            if (cellQueue.isEmpty()) {
+                update.set(false);
+                return 1;
+            }
 
             int k = 0;
 
             //clean the queue
             while (!cellQueue.isEmpty()) {
-                State u = cellQueue.peek();
+                Location u = cellQueue.peek();
                 if (cellHash.contains(u))
                     break;
                 else
@@ -178,12 +203,12 @@ public class DStarLite {
                 synchronized (cellQueue) {
                     if (!loopCheck())
                         break;
-                    State u = cellQueue.poll();
+                    Location u = cellQueue.poll();
                     assert u != null : "list was empty";
-                    State k_old = new State(u);
-                    updateKey(u);
+                    Key k_old = new Key(getKey(u));
+                    Key k_new = calculateKey(u);
 
-                    if (k_old.lt(u)) {
+                    if (k_old.lt(k_new)) {
                         cellQueue.add(u);
                     } else {
                         double g_u = getG(u);
@@ -194,8 +219,8 @@ public class DStarLite {
                             cellHash.remove(u);
                             List<Movement> pred = getPred(u);
                             for (Movement m : pred) {
-                                State s = new State(m.getOrigin());
-                                if (s.neq(s_goal)) {
+                                Location s = m.getOrigin();
+                                if (!s.equals(s_goal)) {
                                     setRHS(s, Math.min(getRHS(s), m.getCost() + g_u));
                                 }
                                 updateVertex(s);
@@ -203,11 +228,11 @@ public class DStarLite {
                         } else {
                             setG(u, Double.POSITIVE_INFINITY);
                             List<Movement> pred = getPred(u);
-                            pred.add(new NullMovement(u.getLocation()));
+                            pred.add(new NullMovement(u));
                             for (Movement m : pred) {
-                                State s = new State(m.getOrigin());
+                                Location s = m.getOrigin();
                                 if (getRHS(s) == m.getCost() + g_u) {
-                                    if (s.neq(s_goal)) {
+                                    if (!s.equals(s_goal)) {
                                         setRHS(s, minRHSSuccessors(s));
                                     }
                                 }
@@ -221,36 +246,41 @@ public class DStarLite {
             }
             update.set(false);
             return 0;
-        }
     }
 
     private boolean loopCheck() {
         synchronized (cellQueue){
-            return !cellQueue.isEmpty() && (cellQueue.peek().lt(updateKey(s_start)) || getRHS(s_start) > getG(s_start));
+            if(cellQueue.isEmpty())
+               return false;
+            Location top = cellQueue.peek();
+            Key topKey = getKey(top);
+            if(topKey.lt(calculateKey(s_start)))
+                return true;
+            return getRHS(s_start) > getG(s_start);
         }
     }
 
     /*
      * Returns the heuristic value between two states
      */
-    private double heuristic(State a, State b) {
-        return (NPCNavigator.instance.approxCost)? Utils.approx3dDistance(a.getVector(), b.getVector()): Utils.trueDist3D(a.getVector(),b.getVector());
+    private double heuristic(Location a, Location b) {
+        return (NPCNavigator.approxCost)? Utils.approx3dDistance(a.toVector(), b.toVector()): Utils.trueDist3D(a.toVector(),b.toVector());
     }
 
-    private State updateKey(State u) {
+    private Key calculateKey(Location u) {
         double val = Math.min(getRHS(u), getG(u));
+        Key key = getKey(u);
+        key.setLeft(val + heuristic(u, s_start) + k_m);
+        key.setRight(val);
 
-        u.k.setLeft(val + heuristic(u, s_start) + k_m);
-        u.k.setRight(val);
-
-        return u;
+        return key;
     }
 
     /*
      * Returns the rhs value for state u.
      */
-    private double getRHS(State u) {
-        CellInfo cell = cellMap.get(u);
+    private double getRHS(Location u) {
+        Info cell = infoMap.get(u);
 
         if (cell == null)
             return Double.POSITIVE_INFINITY;
@@ -260,8 +290,8 @@ public class DStarLite {
     /*
      * Returns the g value for the state u.
      */
-    private double getG(State u) {
-        CellInfo cell = cellMap.get(u);
+    private double getG(Location u) {
+        Info cell = infoMap.get(u);
 
         if (cell == null)
             return Double.POSITIVE_INFINITY;
@@ -271,50 +301,49 @@ public class DStarLite {
     /*
      * Sets the G value for state u
      */
-    private void setG(State u, double g) {
-        makeNewCell(u).g = g;
+    private void setG(Location u, double g) {
+        getInfo(u).g = g;
     }
 
     /*
      * Sets the rhs value for state u
      */
-    private void setRHS(State u, double rhs) {
-        makeNewCell(u).rhs = rhs;
+    private void setRHS(Location u, double rhs) {
+        getInfo(u).rhs = rhs;
     }
 
     /*
      * Checks if a cell is in the hash table, if not it adds it in.
      */
-    private CellInfo makeNewCell(State u) {
-        CellInfo cell = cellMap.get(u);
-        if (cell != null) return cell;
-        cell = new CellInfo();
-        cell.g = cell.rhs = Double.POSITIVE_INFINITY;
-        cellMap.put(u, cell);
-        return cell;
+    private Info getInfo(Location u) {
+        return infoMap.computeIfAbsent(u,k->new Info());
     }
 
 
-    private Cell getCell(State u){
-        return Cell.getCell(u.getLocation());
+    private Cell getCell(Location u){
+        return Cell.getCell(u);
+    }
+
+    private Key getKey(Location u){
+        return keyMap.computeIfAbsent(u,(k)->new Key(Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY));
     }
 
 
-    private List<Movement> getPred(State u) {
+    private List<Movement> getPred(Location u) {
         return getCell(u).getInMovements().stream().filter(Movement::isValid).collect(Collectors.toList());
     }
 
-    private List<Movement> getSucc(State u) {
+    private List<Movement> getSucc(Location u) {
         return getCell(u).getOutMovements().stream().filter(Movement::isValid).collect(Collectors.toList());
     }
 
-    private double minRHSSuccessors(State u) {
+    private double minRHSSuccessors(Location u) {
         List<Movement> s = getSucc(u);
         double min = Double.POSITIVE_INFINITY;
         double tmp;
 
         for (Movement m : s) {
-            State i = new State(m.getDest());
+            Location i = m.getDest();
             tmp = getG(i) + m.getCost();
             if (tmp < min)
                 min = tmp;

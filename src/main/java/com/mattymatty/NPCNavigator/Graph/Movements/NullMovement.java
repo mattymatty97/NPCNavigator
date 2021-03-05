@@ -44,12 +44,20 @@ public class NullMovement extends Movement {
     }
 
     @Override
+    public void reset() {}
+
+    @Override
     public boolean update() {
-        return update(0, new HashSet<>());
+        return false;
     }
 
     @Override
     public boolean update(int dept, Set<Updatable> visited) {
+        return false;
+    }
+
+    @Override
+    public boolean update(int dept, Set<Updatable> visited,boolean silent) {
         return false;
     }
 

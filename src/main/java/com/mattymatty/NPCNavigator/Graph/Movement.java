@@ -8,9 +8,7 @@ import org.bukkit.block.Block;
 import org.bukkit.util.Vector;
 import org.apache.commons.lang3.tuple.Triple;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public abstract class Movement implements Cloneable, Updatable {
 
@@ -34,13 +32,27 @@ public abstract class Movement implements Cloneable, Updatable {
     }
 
     public static Movement checkCache(Movement toCheck){
-        Triple<Location,Location,Class<? extends Movement>> curr = new ImmutableTriple<>(toCheck.getOrigin(),toCheck.getDest(),toCheck.getClass());
-        Movement cached = movementCache.getIfPresent(curr);
-        if(cached==null) {
-            cached = toCheck;
-            movementCache.put(curr,cached);
+        synchronized (movementCache) {
+            Triple<Location, Location, Class<? extends Movement>> curr = new ImmutableTriple<>(toCheck.getOrigin(), toCheck.getDest(), toCheck.getClass());
+            Movement cached = movementCache.getIfPresent(curr);
+            if (cached == null) {
+                cached = toCheck;
+                movementCache.put(curr, cached);
+            }
+            return cached;
         }
-        return cached;
+    }
+
+    public static Collection<Movement> getCachedMovements(){
+        synchronized (movementCache) {
+            return movementCache.asMap().values();
+        }
+    }
+
+    public static void doMovementCleanup(){
+        synchronized (movementCache) {
+            movementCache.cleanUp();
+        }
     }
 
     public abstract Vector getVector();
@@ -66,6 +78,9 @@ public abstract class Movement implements Cloneable, Updatable {
 
     @Override
     public abstract boolean update(int dept, Set<Updatable> visited);
+
+    @Override
+    public abstract boolean update(int dept, Set<Updatable> visited,boolean silent);
 
     @Override
     public abstract Movement clone();

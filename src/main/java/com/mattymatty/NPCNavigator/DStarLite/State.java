@@ -1,31 +1,12 @@
 package com.mattymatty.NPCNavigator.DStarLite;
 
-import com.mattymatty.NPCNavigator.Utils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.MutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.bukkit.Location;
 import org.bukkit.util.Vector;
 
-public class State implements Comparable<State>, java.io.Serializable
+public class State implements java.io.Serializable
 {
     private Location location;
     public Key k = new Key(Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY);
-
-    public class Key extends MutablePair<Double,Double> {
-        /**
-         * Create a new pair instance.
-         *
-         * @param left  the left value, may be null
-         * @param right the right value, may be null
-         */
-        public Key(Double left, Double right) {
-            super(left, right);
-        }
-        public Key(Key other) {
-            super(other.left, other.right);
-        }
-    }
 
     //Default constructor
     public State()
@@ -90,40 +71,7 @@ public class State implements Comparable<State>, java.io.Serializable
         return !eq(s2);
     }
 
-    //Greater than
-    public boolean gt(State s2)
-    {
-        if (k.getLeft() > s2.k.getLeft()) return true;
-        if (k.getLeft() < s2.k.getLeft()) return false;
-        return k.getRight() > s2.k.getRight();
-    }
 
-    //Less than or equal to
-    public boolean lte(State s2)
-    {
-        if (k.getLeft() < s2.k.getLeft()) return true;
-        if (k.getLeft() > s2.k.getLeft()) return false;
-        return k.getRight() <= s2.k.getRight();
-    }
-
-    //Less than
-    public boolean lt(State s2)
-    {
-        if (k.getLeft() < s2.k.getLeft()) return true;
-        if (k.getLeft() > s2.k.getLeft()) return false;
-        return k.getRight() < s2.k.getRight();
-    }
-
-    //CompareTo Method. This is necessary when this class is used in a priority queue
-    public int compareTo(State other)
-    {
-        //This is a modified version of the gt method
-        if (k.getLeft() > other.k.getLeft()) return 1;
-        if (k.getLeft() < other.k.getLeft()) return -1;
-        if (k.getRight() > other.k.getRight()) return 1;
-        if (k.getRight() < other.k.getRight()) return -1;
-        return 0;
-    }
 
     //Use Bukkit Vector hash code Function
     @Override

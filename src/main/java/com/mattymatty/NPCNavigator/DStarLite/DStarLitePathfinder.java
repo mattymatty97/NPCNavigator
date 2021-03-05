@@ -3,10 +3,12 @@ package com.mattymatty.NPCNavigator.DStarLite;
 import com.mattymatty.NPCNavigator.Graph.Cell;
 import com.mattymatty.NPCNavigator.Graph.Movement;
 import com.mattymatty.NPCNavigator.Graph.Movements.NullMovement;
+import com.mattymatty.NPCNavigator.Graph.Updatable;
 import com.mattymatty.NPCNavigator.Graph.UpdateListener;
 import org.bukkit.Location;
 
 import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,9 +42,18 @@ public class DStarLitePathfinder{
             goal.setPitch(0);
             start.setYaw(0);
             goal.setYaw(0);
-            instance.init(start, goal);
+            instance.init(start.toBlockLocation(), goal.toBlockLocation());
             if (current == null)
                 current = start;
+        }
+        return this;
+    }
+
+    public DStarLitePathfinder preload(int range){
+        if(getStatus() == Status.Idle && instance.getGoal() != null){
+            Set<Updatable> visited = new HashSet<>();
+            Cell.getCell(instance.getCurr()).update(range,visited);
+            Cell.getCell(instance.getGoal()).update(range,visited);
         }
         return this;
     }
@@ -91,12 +102,15 @@ public class DStarLitePathfinder{
                 synchronized (lock) {
                     Movement next = instance.getNext();
                     if(next instanceof NullMovement) {
-                        setStatus(Status.Done);
+                        if(next.getDest() == instance.getGoal())
+                            setStatus(Status.Done);
+                        else
+                            setStatus(Status.Failed);
                         return null;
                     }
                     instance.updateStart(current);
                     Cell nextCell = Cell.getCell(next.getDest());
-                    if (makeUpdate(nextCell)) {
+                    if (makeUpdate(nextCell) || instance.needsUpdate()) {
                         update();
                     } else {
                         current = nextCell.getLocation();
@@ -122,7 +136,7 @@ public class DStarLitePathfinder{
 
     private Status setStatus(Status status){
         synchronized (lock) {
-            if(status==Status.Done) {
+            if(status==Status.Done || status == Status.Failed) {
                 Movement.removeListener(listener);
                 instance.end();
             }
@@ -135,7 +149,8 @@ public class DStarLitePathfinder{
         Queued,
         Calculating,
         Ready,
-        Done
+        Done,
+        Failed
     }
 
 }

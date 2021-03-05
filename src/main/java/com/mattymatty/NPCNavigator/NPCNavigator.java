@@ -1,8 +1,9 @@
 package com.mattymatty.NPCNavigator;
 
-import com.destroystokyo.paper.event.block.TNTPrimeEvent;
 import com.mattymatty.NPCNavigator.Graph.Cell;
+import com.mattymatty.NPCNavigator.Graph.Movement;
 import com.mattymatty.NPCNavigator.Graph.Updatable;
+import org.bukkit.Particle;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.event.EventHandler;
@@ -22,7 +23,11 @@ public final class NPCNavigator extends JavaPlugin {
 
     public static NPCNavigator instance;
 
-    public boolean approxCost = false;
+    public static boolean approxCost = false;
+
+    public static double closeThreshold = 0.01;
+
+    public static DebugLevel debugLevel = DebugLevel.None;
 
     @Override
     public void onLoad() {
@@ -157,15 +162,51 @@ public final class NPCNavigator extends JavaPlugin {
             }
 
             private void onBlockChange(Block block, Set<Updatable> visited) {
+                Cell.doCellCleanup();
                 Cell cell = Cell.getCellSilently(block.getLocation());
                 if(cell!=null)
-                    cell.update(1,visited);
+                    cell.update(1,visited,true);
             }
         },this);
+
+        new BukkitRunnable(){
+            @Override
+            public void run() {
+                switch (debugLevel) {
+                    case Movement:
+                        for (Movement mov : Movement.getCachedMovements()) {
+                          if (mov.isValid())
+                              Objects.requireNonNull(mov.getOrigin().getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, mov.getOrigin().toCenterLocation().add(0, 3, 0).add(mov.getVector().multiply(0.5)), 1);
+                         else
+                             Objects.requireNonNull(mov.getOrigin().getWorld()).spawnParticle(Particle.VILLAGER_ANGRY, mov.getOrigin().toCenterLocation().add(0, 1, 0).add(mov.getVector().multiply(0.5)), 1);
+                        }
+                        break;
+                    case Block:
+                        for( Cell cell : Cell.getCachedCells()){
+                        if(cell.isValid())
+                            Objects.requireNonNull(cell.getLocation().getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, cell.getLocation().toCenterLocation().add(0,3,0), 1);
+                        else
+                            Objects.requireNonNull(cell.getLocation().getWorld()).spawnParticle(Particle.VILLAGER_ANGRY, cell.getLocation().toCenterLocation().add(0,1,0), 1);
+
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                Cell.doCellCleanup();
+                Movement.doMovementCleanup();
+            }
+        }.runTaskTimer(this,15,15);
     }
 
     @Override
     public void onDisable() {
         // Plugin shutdown logic
+    }
+
+    public enum DebugLevel{
+        None,
+        Movement,
+        Block
     }
 }

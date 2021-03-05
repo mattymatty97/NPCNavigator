@@ -11,9 +11,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
+import javax.annotation.ParametersAreNonnullByDefault;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @SuppressWarnings("Duplicates")
 public class Commands implements CommandExecutor {
@@ -26,12 +29,13 @@ public class Commands implements CommandExecutor {
     }
 
     @Override
+    @ParametersAreNonnullByDefault
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
             sender.sendMessage("This command can only be run by a player.");
         } else {
             Player player = (Player) sender;
-            if (args.length == 1) {
+            if (args.length > 0) {
                 switch (args[0].toLowerCase()) {
                     case "pos1": {
                         pos1 = player.getLocation();
@@ -51,17 +55,21 @@ public class Commands implements CommandExecutor {
                         return true;
                     }
                     case "approx": {
-                        NPCNavigator.instance.approxCost = !NPCNavigator.instance.approxCost;
-                        sender.sendMessage("Approximation of distance is now " + ((NPCNavigator.instance.approxCost) ? "Active" : "Inactive"));
+                        NPCNavigator.approxCost = !NPCNavigator.approxCost;
+                        sender.sendMessage("Approximation of distance is now " + ((NPCNavigator.approxCost) ? "Active" : "Inactive"));
                         return true;
                     }
                     case "path": {
-                        long stime = System.currentTimeMillis();
+                        int range = 0;
+                        try{
+                            if(args.length>1)
+                                range = Integer.parseInt(args[1]);
+                        }catch (NumberFormatException ignored){}
 
                         sender.sendMessage("Starting path");
                         DStarLitePathfinder pathfinder = DStarLitePathfinder.newDefaultPathfinder();
 
-                        pathfinder.init(pos1.toBlockLocation(), pos2.toBlockLocation()).start();
+                        pathfinder.init(pos1.toBlockLocation(), pos2.toBlockLocation()).preload(range).start();
                         LinkedList<Location> path = new LinkedList<Location>();
                         path.add(pos1.toCenterLocation());
                         BukkitTask particle;
@@ -74,6 +82,14 @@ public class Commands implements CommandExecutor {
                                         Location cur = next.toCenterLocation();
                                         path.add(cur);
                                         Objects.requireNonNull(cur.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, cur, 7);
+                                    }else{
+                                        if(pathfinder.getStatus() == DStarLitePathfinder.Status.Done){
+                                            sender.sendMessage("Destination reached");
+                                            this.cancel();
+                                        }else if (pathfinder.getStatus() == DStarLitePathfinder.Status.Failed){
+                                            sender.sendMessage("No Path Found");
+                                            this.cancel();
+                                        }
                                     }
                                 } else {
                                     sender.sendMessage("No Path Found");
@@ -82,19 +98,18 @@ public class Commands implements CommandExecutor {
                             }
                         }.runTaskTimer(NPCNavigator.instance,5,5);
                         particles.add(particle);
-                        /* particle = Bukkit.getServer().getScheduler().runTaskTimer(NPCNavigator.instance, () -> {
-                            int i = 0;
-                            for (Location loc : path) {
-                                i++;
-                                Location act = cloneLoc(loc);
-                                Bukkit.getServer().getScheduler().runTaskLater(NPCNavigator.instance, () -> {
-                                    Objects.requireNonNull(act.getWorld()).spawnParticle(Particle.VILLAGER_HAPPY, act, 7);
-                                    }, i * 10L);
-                                }
-                        }, 15, 140);
-                        particles.add(particle);*/
-
                         return true;
+                    }
+                    case "debug": {
+                       if(args.length > 1){
+                           try {
+                               NPCNavigator.DebugLevel level = NPCNavigator.DebugLevel.valueOf(args[1]);
+                               NPCNavigator.debugLevel = level;
+                               sender.sendMessage("Debug level set to " + level);
+                               return true;
+                           }catch (NumberFormatException ignored){}
+                       }
+                       sender.sendMessage("Available levels: " + Arrays.stream(NPCNavigator.DebugLevel.values()).map(Objects::toString).collect(Collectors.joining(",")));
                     }
                 }
             }

@@ -69,7 +69,13 @@ public class BlockCell extends Cell {
     }
 
     @Override
-    public boolean update(int dept, Set<Updatable> visited) {
+    public void reset() {
+        this.affectedBlocks = Collections.emptySet();
+        this.valid = true;
+    }
+
+    @Override
+    public boolean update(int dept, Set<Updatable> visited,boolean silent) {
         if (visited.contains(this))
             return false;
         visited.add(this);
@@ -96,9 +102,9 @@ public class BlockCell extends Cell {
             valid = false;
         }
 
-        updated = updated || inMovements.stream().map((m) -> m.update(dept, visited)).anyMatch((p) -> p);
-        updated = updated || outMovements.stream().map((m) -> m.update(dept, visited)).anyMatch((p) -> p);
-
+        boolean in = inMovements.stream().map((m) -> m.update(dept, visited,silent)).reduce(false,(a,b)->a || b);
+        boolean out = outMovements.stream().map((m) -> m.update(dept, visited,silent)).reduce(false,(a,b)->a || b);
+        updated |= in | out;
         return updated;
     }
 
